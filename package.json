@@ -1,6 +1,6 @@
 {
   "name": "native-keyshare",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "main": "index.js",
   "scripts": {
     "install": "node-gyp rebuild",
@@ -24,7 +24,7 @@
   "description": "High-performance native shared object store for Node.js worker threads",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/shay12tg/native-keyshare.git"
+    "url": "git+https://github.com/Shay12tg/native-keyshare.git"
   },
   "dependencies": {
     "node-addon-api": "^8.3.0",
@@ -38,7 +38,7 @@
     "README.md"
   ],
   "engines": {
-    "node": ">=14.0.0"
+    "node": ">=18.0.0"
   },
   "os": [
     "darwin",
