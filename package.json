@@ -1,0 +1,53 @@
+{
+  "name": "native-keyshare",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "install": "node-gyp rebuild",
+    "build": "node-gyp rebuild",
+    "test": "node test.js"
+  },
+  "keywords": [
+    "native",
+    "addon",
+    "shared",
+    "object",
+    "store",
+    "worker",
+    "threads",
+    "ipc",
+    "interprocess",
+    "communication"
+  ],
+  "author": "Shay Hen",
+  "license": "MIT",
+  "description": "High-performance native shared object store for Node.js worker threads",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shay12tg/native-keyshare.git"
+  },
+  "dependencies": {
+    "node-addon-api": "^8.3.0",
+    "node-gyp": "^10.0.1"
+  },
+  "files": [
+    "shared_object.cc",
+    "binding.gyp",
+    "index.js",
+    "index.d.ts",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ],
+  "gypfile": true
+}
