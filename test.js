@@ -4,11 +4,11 @@ const { createManager, createStore } = require('./index');
 if (isMainThread) {
   console.log('Primary process started');
   const manager = createManager();
-  
+
   // Create two worker threads instead of forks
   const worker1 = new Worker(__filename);
   const worker2 = new Worker(__filename);
-  
+
   // Register workers with manager
   manager.registerFork(worker1);
   manager.registerFork(worker2);
@@ -26,7 +26,7 @@ if (isMainThread) {
     const worker3 = new Worker(__filename);
     manager.registerFork(worker3);
   }, 200);
-  
+
   let i = 8;
   // Wait a bit longer before starting test sequence to ensure workers are ready
   setTimeout(() => {
@@ -44,14 +44,14 @@ if (isMainThread) {
 
   setTimeout(() => {
     console.log('Primary: Setting updated value');
-    globalThis.SharedKVStore.set('test' , { hello: 'updated world'+ i++ });
+    globalThis.SharedKVStore.set('test', { hello: 'updated world' + i++ });
   }, 1000);
 
   setTimeout(() => {
     console.log('Primary: Deleting value');
     globalThis.SharedKVStore.delete('test');
   }, 1500);
-  
+
 
   // Handle worker exits
   process.on('exit', () => {
@@ -63,7 +63,7 @@ if (isMainThread) {
 
   const store = createStore(parentPort);
   console.log(`Worker initialized`);
-  
+
   // Start querying after initialization
   const checkInterval = setInterval(() => {
     const value = store.get('test');
@@ -78,7 +78,7 @@ if (isMainThread) {
 }
 
 
-function getDurationInMilliseconds (start) {
+function getDurationInMilliseconds(start) {
   const NS_PER_SEC = 1e9;
   const NS_TO_MS = 1e6;
   const diff = process.hrtime(start);
