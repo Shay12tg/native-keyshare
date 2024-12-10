@@ -12,7 +12,5 @@ High-performance native shared object store for Node.js worker threads.
 # Prerequisites
 
 - Node.js >= 18.0.0
-- C++ compiler:
-  - Windows: Visual Studio Build Tools
-  - macOS: Xcode Command Line Tools (`xcode-select --install`)
-  - Linux: GCC (`sudo apt-get install build-essential`)
+- msgpackr - optional (2x performance)
+- msgpackr-extract - optional (additional 10-20%)
