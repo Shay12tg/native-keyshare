@@ -1,55 +1,50 @@
 const { Worker, isMainThread, parentPort } = require('worker_threads');
 const { createManager, createStore } = require('./index');
 
+const store = createStore();
+
 if (isMainThread) {
   console.log('Primary process started');
-  const manager = createManager();
 
   // Create two worker threads instead of forks
   const worker1 = new Worker(__filename);
   const worker2 = new Worker(__filename);
 
-  // Register workers with manager
-  manager.registerFork(worker1);
-  manager.registerFork(worker2);
-
-  globalThis.SharedKVStore.set('someval', { hello: '1' });
-
+  store.set('someval', { hello: '1' });
 
   let m = process.hrtime();
   for (let i = 0; i < 10000; i++) {
-    globalThis.SharedKVStore.get('someval');
+    store.get('someval');
   }
   console.log(getDurationInMilliseconds(m));
 
   setTimeout(() => {
     const worker3 = new Worker(__filename);
-    manager.registerFork(worker3);
   }, 200);
 
   let i = 8;
   // Wait a bit longer before starting test sequence to ensure workers are ready
   setTimeout(() => {
     console.log('Primary: Setting initial value');
-    globalThis.SharedKVStore.set('test', { hello: 'world' + i++ });
+    store.set('test', { hello: 'world' + i++ });
   }, 100);
   setTimeout(() => {
     console.log('Primary: Setting initial value');
-    globalThis.SharedKVStore.set('test', { hello: 'world' + i++ });
+    store.set('test', { hello: 'world' + i++ });
   }, 200);
   setTimeout(() => {
     console.log('Primary: Setting initial value');
-    globalThis.SharedKVStore.set('test', { hello: 'world' + i++ });
+    store.set('test', { hello: 'world' + i++ });
   }, 300);
 
   setTimeout(() => {
     console.log('Primary: Setting updated value');
-    globalThis.SharedKVStore.set('test', { hello: 'updated world' + i++ });
+    store.set('test', { hello: 'updated world' + i++ });
   }, 1000);
 
   setTimeout(() => {
     console.log('Primary: Deleting value');
-    globalThis.SharedKVStore.delete('test');
+    store.delete('test');
   }, 1500);
 
 
@@ -61,7 +56,6 @@ if (isMainThread) {
 } else {
   console.log(`Worker started`);
 
-  const store = createStore(parentPort);
   console.log(`Worker initialized`);
 
   // Start querying after initialization
