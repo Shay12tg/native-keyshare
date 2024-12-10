@@ -118,7 +118,7 @@ class SharedKVStore {
     const buffer = this.buffers.get(key);
 
     if (!buffer) {
-      console.warn(`Attempted to get undefined key: ${key}`);
+      // console.warn(`Attempted to get undefined key: ${key}`);
       return undefined;
     }
 

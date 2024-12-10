@@ -1,3 +1,5 @@
+import { Worker } from 'node:worker_threads';
+
 declare module 'native-keyshare' {
     // Shared key-value store interface
     interface ISharedKVStore {
