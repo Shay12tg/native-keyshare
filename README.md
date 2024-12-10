@@ -6,12 +6,12 @@ A high-performance shared key-value store implementation designed for multi-thre
 
 - **Shared Data Access**: Allows multiple worker threads to share and manipulate a single key-value store.
 - **High Performance**: Optimized for fast reads and writes using binary data formats.
-- **Worker Management**: Seamlessly register and unregister worker threads.
+- **Simplified Communication**: Uses BroadcastChannel for seamless thread communication.
 - **TypeScript Support**: Includes type definitions for a great developer experience.
 
 ## Prerequisites
 
-- **Node.js** >= 15.0.0
+- **Node.js** >= 16.0.0
 - **msgpackr** (optional): Improves serialization/deserialization performance by 2x.
 - **msgpackr-extract** (optional): Additional 10-20% performance gain.
 
@@ -27,24 +27,17 @@ If you want to enable optional performance improvements, also install `msgpackr`
 
 ## Usage
 
-### Creating a Shared Key-Value Manager
+### Using a Shared Key-Value store
 
-The manager runs in the main thread and coordinates access to the key-value store across worker threads.
-
-#### Main Thread Example
+#### Main Thread Example (`index.js`)
 
     const { createManager } = require('shared-kv-store');
     const { Worker } = require('worker_threads');
 
-    const manager = createManager();
+    const store = createStore();
 
     const worker1 = new Worker('./worker.js');
     const worker2 = new Worker('./worker.js');
-
-    manager.registerFork(worker1);
-    manager.registerFork(worker2);
-
-    const store = globalThis.SharedKVStore.instance;
 
     store.set('exampleKey', { value: 'Hello from Main!' });
     console.log(store.get('exampleKey')); // Outputs: { value: 'Hello from Main!' }
@@ -53,7 +46,7 @@ The manager runs in the main thread and coordinates access to the key-value stor
 
     const { createStore } = require('shared-kv-store');
 
-    const store = createStore(parentPort);
+    const store = createStore();
 
     setTimeout(() => {
       console.log(store.get('exampleKey')); // Outputs: { value: 'Hello from Main!' }
@@ -61,19 +54,6 @@ The manager runs in the main thread and coordinates access to the key-value stor
     }, 1000);
 
 ## API
-
-### Manager API
-
-#### `createManager()`
-Creates a new shared key-value manager.
-
-**Returns**: `ISharedKVManager`
-
-- **`registerFork(worker: Worker): boolean`**  
-  Registers a worker thread to the manager.
-
-- **`unregisterFork(worker: Worker): boolean`**  
-  Unregisters a worker thread from the manager.
 
 ### Store API
 
@@ -97,22 +77,20 @@ Creates a new shared key-value store for a worker thread.
 
 #### Main Thread
 
-    const { createManager } = require('shared-kv-store');
+    const { createStore } = require('shared-kv-store');
     const { Worker } = require('worker_threads');
 
-    const manager = createManager();
+    const store = createStore();
     const worker = new Worker('./worker.js');
-    manager.registerFork(worker);
 
-    const kvStore = globalThis.SharedKVStore.instance;
-    kvStore.set('exampleKey', { value: 'Hello from Main!' });
-    console.log(kvStore.get('exampleKey')); // { value: 'Hello from Main!' }
+    store.set('exampleKey', { value: 'Hello from Main!' });
+    console.log(store.get('exampleKey')); // { value: 'Hello from Main!' }
 
 #### Worker (`worker.js`)
 
     const { createStore } = require('shared-kv-store');
 
-    const store = createStore(parentPort);
+    const store = createStore();
 
     setTimeout(() => {
       console.log(store.get('exampleKey')); // { value: 'Hello from Main!' }
@@ -123,7 +101,7 @@ Creates a new shared key-value store for a worker thread.
 
 Performance test for `get`:
 
-    const store = globalThis.SharedKVStore.instance;
+    const store = createStore();
     store.set('test', { value: 'Benchmark' });
 
     console.time('Benchmark');

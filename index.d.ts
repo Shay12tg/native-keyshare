@@ -1,5 +1,3 @@
-import { Worker } from 'node:worker_threads';
-
 declare module 'native-keyshare' {
     // Shared key-value store interface
     interface ISharedKVStore {
@@ -26,30 +24,6 @@ declare module 'native-keyshare' {
          */
         delete(key: string): boolean;
     }
-
-    // Shared key-value manager interface
-    interface ISharedKVManager {
-        /**
-         * Registers a worker to the manager.
-         * @param worker - The worker to register.
-         * @returns `true` if the worker is registered successfully, otherwise `false`.
-         */
-        registerFork(worker: Worker): boolean;
-
-        /**
-         * Unregisters a worker from the manager.
-         * @param worker - The worker to unregister.
-         * @returns `true` if the worker is unregistered successfully, otherwise `false`.
-         */
-        unregisterFork(worker: Worker): boolean;
-    }
-
-    // Exports
-    /**
-     * Creates a new shared key-value manager.
-     * @returns An instance of `ISharedKVManager`.
-     */
-    export function createManager(): ISharedKVManager;
 
     /**
      * Creates a new shared key-value store.

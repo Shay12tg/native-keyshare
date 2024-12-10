@@ -1,4 +1,4 @@
-const { BroadcastChannel } = require('worker_threads');
+const { BroadcastChannel } = require('node:worker_threads');
 
 class SharedKVStore {
   constructor(msgpack = true) {
@@ -49,14 +49,12 @@ class SharedKVStore {
     if (!message || typeof message !== 'object') return;
 
     try {
-      switch (message.type) {
-        case 'SKV:UPDATE':
-          if (message.action === 'set' && message.buffer instanceof SharedArrayBuffer) {
-            this.buffers.set(message.key, message.buffer);
-          } else if (message.action === 'delete') {
-            this.buffers.delete(message.key);
-          }
-          break;
+      const { action, key, buffer } = message;
+
+      if (action === 'set' && buffer instanceof SharedArrayBuffer) {
+        this.buffers.set(key, buffer);
+      } else if (action === 'delete') {
+        this.buffers.delete(key);
       }
     } catch (err) {
       console.error(`Error handling message: ${err.message}`);
@@ -86,7 +84,6 @@ class SharedKVStore {
     }
 
     this.channel.postMessage({
-      type: 'SKV:UPDATE',
       action: 'set',
       key,
       buffer,
@@ -126,7 +123,6 @@ class SharedKVStore {
     this.buffers.delete(key);
 
     this.channel.postMessage({
-      type: 'SKV:UPDATE',
       action: 'delete',
       key,
     });
@@ -135,43 +131,8 @@ class SharedKVStore {
   }
 }
 
-function createStore(parentPort = undefined) {
+function createStore() {
   const store = new SharedKVStore();
-
-  if (parentPort) {
-    const messageHandler = (message) => {
-      if (!message || typeof message !== 'object') return;
-
-      try {
-        switch (message.type) {
-          case 'SKV:INIT_RESPONSE':
-            if (Array.isArray(message.buffers)) {
-              message.buffers.forEach(({ key, buffer }) => {
-                if (buffer instanceof SharedArrayBuffer) {
-                  store.buffers.set(key, buffer);
-                }
-              });
-            }
-            break;
-
-          case 'SKV:UPDATE':
-            if (message.action === 'set' && message.buffer instanceof SharedArrayBuffer) {
-              store.buffers.set(message.key, message.buffer);
-            } else if (message.action === 'delete') {
-              store.buffers.delete(message.key);
-            }
-            break;
-
-          default:
-        }
-      } catch (err) {
-        console.error(`Worker: Error handling message: ${err.message}`);
-      }
-    };
-
-    parentPort.on('message', messageHandler);
-    parentPort.postMessage({ type: 'SKV:INIT_REQUEST' });
-  }
 
   return {
     set: store.set.bind(store),
@@ -180,15 +141,4 @@ function createStore(parentPort = undefined) {
   };
 }
 
-function createManager() {
-  const store = new SharedKVStore();
-
-  return {
-    registerFork: (worker) => {
-      worker.on('message', (msg) => store.handleMessage(msg));
-    },
-    unregisterFork: () => {},
-  };
-}
-
-module.exports = { createManager, createStore };
+module.exports = { createStore };
