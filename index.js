@@ -164,49 +164,51 @@ class SharedKVStore {
   }
 }
 
-function createStore(parentPort) {
+function createStore(parentPort = undefined) {
   const store = new SharedKVStore();
 
-  const messageHandler = (message) => {
-    // console.log(`Worker: Received message: ${JSON.stringify(message)}`);
-    if (!message || typeof message !== 'object') return;
+  if (parentPort) {
+    const messageHandler = (message) => {
+      // console.log(`Worker: Received message: ${JSON.stringify(message)}`);
+      if (!message || typeof message !== 'object') return;
 
-    try {
-      switch (message.type) {
-        case 'SKV:INIT_RESPONSE':
-          // console.log('Worker: Initializing buffers');
-          if (Array.isArray(message.buffers)) {
-            message.buffers.forEach(({ key, buffer }) => {
-              if (buffer instanceof SharedArrayBuffer) {
-                store.buffers.set(key, buffer);
-                // console.log(`Worker: Buffer initialized for key: ${key}`);
-              }
-            });
-          }
-          break;
+      try {
+        switch (message.type) {
+          case 'SKV:INIT_RESPONSE':
+            // console.log('Worker: Initializing buffers');
+            if (Array.isArray(message.buffers)) {
+              message.buffers.forEach(({ key, buffer }) => {
+                if (buffer instanceof SharedArrayBuffer) {
+                  store.buffers.set(key, buffer);
+                  // console.log(`Worker: Buffer initialized for key: ${key}`);
+                }
+              });
+            }
+            break;
 
-        case 'SKV:UPDATE':
-          if (message.action === 'set' && message.buffer instanceof SharedArrayBuffer) {
-            store.buffers.set(message.key, message.buffer);
-            // console.log(`Worker: Buffer updated for key: ${message.key}`);
-          } else if (message.action === 'delete') {
-            store.buffers.delete(message.key);
-            // console.log(`Worker: Buffer deleted for key: ${message.key}`);
-          }
-          break;
+          case 'SKV:UPDATE':
+            if (message.action === 'set' && message.buffer instanceof SharedArrayBuffer) {
+              store.buffers.set(message.key, message.buffer);
+              // console.log(`Worker: Buffer updated for key: ${message.key}`);
+            } else if (message.action === 'delete') {
+              store.buffers.delete(message.key);
+              // console.log(`Worker: Buffer deleted for key: ${message.key}`);
+            }
+            break;
 
-        default:
+          default:
           // console.warn(`Worker: Unknown message type received: ${message.type}`);
+        }
+      } catch (err) {
+        console.error(`Worker: Error handling message: ${err.message}`);
       }
-    } catch (err) {
-      console.error(`Worker: Error handling message: ${err.message}`);
-    }
-  };
+    };
 
-  parentPort.on('message', messageHandler);
+    parentPort.on('message', messageHandler);
 
-  // console.log('Worker: Requesting initialization data');
-  parentPort.postMessage({ type: 'SKV:INIT_REQUEST' });
+    // console.log('Worker: Requesting initialization data');
+    parentPort.postMessage({ type: 'SKV:INIT_REQUEST' });
+  }
 
   return {
     set: store.set.bind(store),
