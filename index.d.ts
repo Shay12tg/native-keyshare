@@ -15,7 +15,7 @@ declare module 'native-keyshare' {
          * @param key - The key to retrieve.
          * @returns The associated value, or `undefined` if the key does not exist.
          */
-        get(key: string): any;
+        get<T = any>(key: string): T | undefined;
 
         /**
          * Deletes a key-value pair from the store.
@@ -54,5 +54,5 @@ declare module 'native-keyshare' {
      * @param parentPort - The parent port for the worker thread.
      * @returns An instance of `ISharedKVStore`.
      */
-    export function createStore(parentPort: MessagePort): ISharedKVStore;
+    export function createStore(parentPort?: MessagePort | null): ISharedKVStore;
 }
