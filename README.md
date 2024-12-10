@@ -62,7 +62,7 @@ Creates a new shared key-value store for a worker thread.
 
 **Returns**: `ISharedKVStore`
 
-- **`set(key: string, value: any, resizeBuffer?: boolean): boolean`**  
+- **`set(key: string, value: any, options = {}): boolean`**  
   Sets a key-value pair in the store.
 
 - **`get(key: string): any`**  

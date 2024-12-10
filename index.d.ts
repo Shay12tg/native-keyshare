@@ -1,14 +1,19 @@
 declare module 'native-keyshare' {
+    interface SetOptions {
+        mutable?: boolean;
+        minBufferSize?: number;
+    }
+
     // Shared key-value store interface
     interface ISharedKVStore {
         /**
          * Sets a key-value pair in the store.
          * @param key - The key to set.
          * @param value - The value to associate with the key.
-         * @param resizeBuffer - Whether to resize the buffer if necessary.
+         * @param options - Optional SetOptions.
          * @returns `true` if the operation is successful, otherwise `false`.
          */
-        set(key: string, value: any, resizeBuffer?: boolean): boolean;
+        set(key: string, value: any, options: SetOptions = {}): boolean;
 
         /**
          * Gets the value associated with a key.

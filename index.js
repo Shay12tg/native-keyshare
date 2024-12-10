@@ -36,7 +36,7 @@ class SharedKVStore {
       },
     };
 
-    this.buffers = new Map(); // key -> SharedArrayBuffer
+    this.buffers = new Map();
     this.channel = new BroadcastChannel('SharedKVStore');
     this.channel.onmessage = (message) => {
       this.handleMessage(message.data);
@@ -61,21 +61,23 @@ class SharedKVStore {
     }
   }
 
-  set(key, value, resizeBuffer = false) {
+  set(key, value, options = {}) {
     if (value === undefined) {
       console.warn(`Attempted to set undefined value for key: ${key}`);
       return false;
     }
 
-    const data = this.packr.pack(value); // Use msgpackr to serialize the value
+    const data = this.packr.pack(value);
     let buffer = this.buffers.get(key);
 
-    if (buffer && !resizeBuffer && buffer.byteLength >= data.length + 4) {
+    const bufferSize = Math.max(options.minBufferSize ?? 0, data.length) + 4;
+
+    if (buffer && !options.mutable && buffer.byteLength >= bufferSize) {
       const view = new DataView(buffer);
       view.setUint32(0, data.length);
       new Uint8Array(buffer, 4, data.length).set(data);
     } else {
-      buffer = new SharedArrayBuffer(data.length + 4);
+      buffer = new SharedArrayBuffer(bufferSize);
       const view = new DataView(buffer);
       view.setUint32(0, data.length);
       new Uint8Array(buffer, 4).set(data);
@@ -108,7 +110,7 @@ class SharedKVStore {
       }
 
       const data = new Uint8Array(buffer, 4, size);
-      return this.packr.unpack(data); // Use msgpackr to deserialize the value
+      return this.packr.unpack(data);
     } catch (err) {
       console.error(`Failed to parse buffer for key: ${key}. Error: ${err.message}`);
       return undefined;
