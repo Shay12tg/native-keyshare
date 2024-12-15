@@ -1,7 +1,8 @@
 declare module 'native-keyshare' {
     interface SetOptions {
-        mutable?: boolean;
+        immutable?: boolean;
         minBufferSize?: number;
+        ttl?: number | undefined;
     }
 
     // Shared key-value store interface
@@ -28,6 +29,11 @@ declare module 'native-keyshare' {
          * @returns `true` if the key was deleted, otherwise `false`.
          */
         delete(key: string): boolean;
+
+        /**
+         * Close the store. cleanup local maps and buffer references.
+         */
+        close(): void
     }
 
     /**

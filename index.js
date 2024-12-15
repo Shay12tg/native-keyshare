@@ -40,14 +40,14 @@ class SharedKVStore {
       },
     };
 
-
     this.storeLockBuffer = new SharedArrayBuffer(LOCK_BYTES);
     this.storeLock = new Int32Array(this.storeLockBuffer);
 
+    this.ttlMap = new Map();
     this.metaBuffers = new Map();
     this.dataBuffers = new Map();
 
-    this.initTimestamp = process.hrtime.bigint();
+    this.initTimestamp = Date.now();//process.hrtime.bigint();
 
     this.channel = new BroadcastChannel(`SharedKVStore:${storeName}`);
     this.channel.onmessage = (message) => {
@@ -59,6 +59,46 @@ class SharedKVStore {
       action: 'initialize_request',
       timestamp: this.initTimestamp,
     });
+
+    this.interval = setInterval(this.handleTTL.bind(this), 1000);
+  }
+
+  handleTTL() {
+    let ttlBatch = this.ttlBatch ?? 0;
+    if (ttlBatch >= this.ttlMap.size) {
+      ttlBatch = 0;
+    }
+    const now = Date.now();
+    const limit = ttlBatch + 250;
+    let i = 0;
+
+    for (const [key, ttl] of this.ttlMap.entries()) {
+      if (i++ < ttlBatch) {
+        continue;
+      }
+
+      if (now >= ttl) {
+        this.metaBuffers.delete(key);
+        this.dataBuffers.delete(key);
+        this.ttlMap.delete(key);
+      }
+
+      if (i === limit) {
+        break;
+      }
+    }
+
+    this.ttlBatch = i;
+  }
+
+  close() {
+    this.ttlMap.clear();
+    this.dataBuffers.clear();
+    this.metaBuffers.clear();
+    this.channel.close();
+    clearInterval(this.interval);
+    stores.delete(this.storeName);
+    Object.keys(this).forEach(key => delete this[key]);
   }
 
   handleMessage(message) {
@@ -67,12 +107,44 @@ class SharedKVStore {
     }
 
     try {
-      const { action, key, metaBuffer, dataBuffer, pattern, storeLockBuffer, keys, timestamp } = message;
+      if (
+        message.action === 'set' &&
+        message.metaBuffer instanceof SharedArrayBuffer &&
+        message.dataBuffer instanceof SharedArrayBuffer
+      ) {
+        this.metaBuffers.set(message.key, message.metaBuffer);
+        this.dataBuffers.set(message.key, message.dataBuffer);
+        if (message.ttl > 0) {
+          this.ttlMap.set(message.key, message.ttl);
+        } else {
+          this.ttlMap.delete(message.key);
+        }
+        return;
+      }
+
+      if (message.action === 'ttl_set' && message.key) {
+        if (typeof message.ttl === 'number' && message.ttl > 0) {
+          this.ttlMap.set(message.key, message.ttl);
+        } else {
+          this.ttlMap.delete(message.key);
+        }
+        return;
+      }
+
+      if (message.action === 'delete') {
+        if (message.pattern) {
+          this.deletePattern(message.pattern);
+        } else if (message.key) {
+          this.metaBuffers.delete(message.key);
+          this.dataBuffers.delete(message.key);
+        }
+        return;
+      }
 
       // todo work on the initialization. too much cross talk
-      if (action === 'initialize_request') {
+      if (message.action === 'initialize_request') {
         // Compare timestamps and respond if the current thread has the latest initialization
-        if (timestamp > this.initTimestamp) {
+        if (message.timestamp > this.initTimestamp) {
           // console.log('initing', this.initTimestamp, timestamp);
           this.channel.postMessage({
             action: 'initialize_response',
@@ -88,37 +160,25 @@ class SharedKVStore {
         return;
       }
 
-      if (action === 'initialize_response' && timestamp < this.initTimestamp) {
+      if (message.action === 'initialize_response' && message.timestamp < this.initTimestamp) {
         // Initialize store based on the received state
-        if (storeLockBuffer instanceof SharedArrayBuffer) {
+        if (message.storeLockBuffer instanceof SharedArrayBuffer) {
           // console.log('inited', this.initTimestamp, timestamp);
-          this.storeLockBuffer = storeLockBuffer;
+          this.storeLockBuffer = message.storeLockBuffer;
           this.storeLock = new Int32Array(this.storeLockBuffer);
 
           // Initialize with existing keys
-          if (Array.isArray(keys)) {
-            for (const { key, metaBuffer, dataBuffer } of keys) {
+          if (Array.isArray(message.keys)) {
+            for (const { key, metaBuffer, dataBuffer } of message.keys) {
               if (metaBuffer instanceof SharedArrayBuffer && dataBuffer instanceof SharedArrayBuffer) {
                 this.metaBuffers.set(key, metaBuffer);
                 this.dataBuffers.set(key, dataBuffer);
               }
             }
           }
-          this.initTimestamp = timestamp;
+          this.initTimestamp = message.timestamp;
         }
         return;
-      }
-
-      if (action === 'set' && metaBuffer instanceof SharedArrayBuffer && dataBuffer instanceof SharedArrayBuffer) {
-        this.metaBuffers.set(key, metaBuffer);
-        this.dataBuffers.set(key, dataBuffer);
-      } else if (action === 'delete') {
-        if (pattern) {
-          this.deletePattern(pattern);
-        } else {
-          this.metaBuffers.delete(key);
-          this.dataBuffers.delete(key);
-        }
       }
     } catch (err) {
       console.error(`Error handling message: ${err.message}`);
@@ -191,7 +251,30 @@ class SharedKVStore {
       }
       acquired = true;
 
-      if (dataBuffer && !options.mutable && dataBuffer.byteLength >= requiredSize) {
+      const reuseBuffer = dataBuffer && !options.immutable && dataBuffer.byteLength >= requiredSize;
+      const previousTTL = this.ttlMap.get(key);
+      const ttl = options.ttl > 0 ? Date.now() + options.ttl * 1000 : undefined;
+
+      if (ttl !== undefined) {
+        this.ttlMap.set(key, Date.now() + options.ttl * 1000);
+        if (reuseBuffer) {
+          this.channel.postMessage({
+            action: 'ttl_set',
+            key,
+            ttl
+          });
+        }
+      } else if (previousTTL > 0) {
+        this.ttlMap.delete(key);
+        if (reuseBuffer) {
+          this.channel.postMessage({
+            action: 'ttl_set',
+            key
+          });
+        }
+      }
+
+      if (reuseBuffer) {
         const headerView = new Uint32Array(metaBuffer, LOCK_BYTES, 1);
         headerView[0] = data.length;
         new Uint8Array(dataBuffer, 0, data.length).set(data);
@@ -216,7 +299,8 @@ class SharedKVStore {
             action: 'set',
             key,
             metaBuffer: newMetaBuffer,
-            dataBuffer: newDataBuffer
+            dataBuffer: newDataBuffer,
+            ttl
           });
         } finally {
           if (acquiredStore) {
@@ -302,6 +386,7 @@ class SharedKVStore {
       try {
         this.metaBuffers.delete(key);
         this.dataBuffers.delete(key);
+        this.ttlMap.delete(key);
         this.channel.postMessage({
           action: 'delete',
           key
@@ -393,6 +478,10 @@ function createStore(storeName = 'default', msgpack = true) {
     get: store.get.bind(store),
     delete: store.delete.bind(store),
     listKeys: store.listKeys.bind(store),
+    close: () => {
+      store.close();
+      Object.keys(wrapper).forEach(key => delete wrapper[key]);
+    }
   };
   stores.set(storeName, wrapper);
   return wrapper;

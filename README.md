@@ -93,7 +93,8 @@ const defaultStore = createStore();      // Default store
 #### `set(key: string, value: any, options?: Options): boolean`
 Sets a key-value pair in the store.
 - **options.minBufferSize**: Initial buffer size in bytes if you expect value to grow
-- **options.maxBufferSize**: Buffer size limit. if object exceeds this, key will be removed.
+- **options.immutable**: Dont allow rewriting the buffer. create a new one on update.
+- **options.ttl**: TTL in seconds.
 
 #### `get(key: string): any`
 Retrieves a value from the store.
@@ -103,6 +104,9 @@ Deletes a value. Supports patterns.
 
 #### `listKeys(pattern?: string): string[]`
 Lists all keys, optionally filtered by pattern.
+
+#### `close(): void`
+Close the store. cleanup local maps and buffer references.
 
 ### Pattern Operations
 

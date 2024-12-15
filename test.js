@@ -6,15 +6,14 @@ const store = createStore('');
 if (isMainThread) {
   console.log('Primary process started');
 
-
-  store.set('test', { hello: 1 }, {minBufferSize: 10000});
+  store.set('test', { hello: 1 }, {minBufferSize: 1024 * 32}); // 32k
   store.set('test', { hello: '133' });
   store.set('test', { hello: '12333' });
   store.set('test', { hello: 1, kk:'1111111111111111111111111111111111111111111111111' });
   
   let m = process.hrtime();
   let x = 1;
-  for (let i = 0; i < 10000; i++) {
+  for (let i = 0; i < 30000; i++) {
     const y = store.get('test');
     if (y.hello++ !== x++) {
       console.error('a', y.hello, x);
