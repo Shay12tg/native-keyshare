@@ -1,4 +1,4 @@
-const { BroadcastChannel, isMainThread } = require('node:worker_threads');
+const { BroadcastChannel } = require('node:worker_threads');
 
 const stores = new Map();
 const LOCK_BYTES = 4;    // 32 bits for lock
@@ -26,7 +26,7 @@ class SharedKVStore {
           this.packr = null;
         }
       }
-    } catch (E) {  }
+    } catch (E) { }
     this.packr ||= {
       pack: (value) => {
         const jsonStr = JSON.stringify(value);
@@ -62,7 +62,9 @@ class SharedKVStore {
   }
 
   handleMessage(message) {
-    if (!message || typeof message !== 'object') return;
+    if (!message || typeof message !== 'object') {
+      return;
+    }
 
     try {
       const { action, key, metaBuffer, dataBuffer, pattern, storeLockBuffer, keys, timestamp } = message;
@@ -124,8 +126,7 @@ class SharedKVStore {
   }
 
   acquireStoreLock(timeout = 1000) {
-    const endTime = Date.now() + timeout;
-    while (Date.now() < endTime) {
+    for (let i = timeout / 10; i > 0; i--) {
       if (Atomics.compareExchange(this.storeLock, 0, 0, 1) === 0) {
         return true;
       }
@@ -153,7 +154,7 @@ class SharedKVStore {
           return true;
         }
       }
-      Atomics.wait(lockView, 0, current, 10); // Wait up to 10 ms before retry
+      Atomics.wait(lockView, 0, current, 10);
     }
   }
 
@@ -172,7 +173,9 @@ class SharedKVStore {
   }
 
   set(key, value, options = {}) {
-    if (!this.validateKey(key) || value === undefined) return false;
+    if (!this.validateKey(key) || value === undefined) {
+      return false;
+    }
 
     let metaBuffer = this.metaBuffers.get(key);
     let dataBuffer = this.dataBuffers.get(key);
@@ -183,7 +186,9 @@ class SharedKVStore {
     const requiredSize = Math.max(options.minBufferSize ?? 0, data.length);
 
     try {
-      if (metaBuffer && !this.acquireLock(metaBuffer)) return false;
+      if (metaBuffer && !this.acquireLock(metaBuffer)) {
+        return false;
+      }
       acquired = true;
 
       if (dataBuffer && !options.mutable && dataBuffer.byteLength >= requiredSize) {
@@ -214,8 +219,9 @@ class SharedKVStore {
             dataBuffer: newDataBuffer
           });
         } finally {
-          if (acquiredStore)
+          if (acquiredStore) {
             this.releaseStoreLock();
+          }
         }
       }
 
@@ -233,7 +239,9 @@ class SharedKVStore {
   get(key) {
     const metaBuffer = this.metaBuffers.get(key);
     const dataBuffer = this.dataBuffers.get(key);
-    if (!metaBuffer || !dataBuffer) return undefined;
+    if (!metaBuffer || !dataBuffer) {
+      return undefined;
+    }
 
     if (!this.acquireLock(metaBuffer)) {
       console.warn('failed to acquire');
@@ -257,7 +265,7 @@ class SharedKVStore {
         arrayBufferView.set(data);
         return this.packr.unpack(arrayBufferView);
       }
-      
+
       const data = new DataView(dataBuffer, 0, size);
       return this.packr.unpack(data);
     } catch (err) {
@@ -269,19 +277,27 @@ class SharedKVStore {
   }
 
   delete(key) {
-    if (!this.validateKey(key)) return false;
+    if (!this.validateKey(key)) {
+      return false;
+    }
 
     if (key.includes('*') || key.includes('?') || (key.startsWith('/') && key.endsWith('/'))) {
       return this.deletePattern(key);
     }
 
     const metaBuffer = this.metaBuffers.get(key);
-    if (!metaBuffer) return false;
+    if (!metaBuffer) {
+      return false;
+    }
 
-    if (!this.acquireLock(metaBuffer)) return false;
+    if (!this.acquireLock(metaBuffer)) {
+      return false;
+    }
 
     try {
-      if (!this.acquireStoreLock()) return false;
+      if (!this.acquireStoreLock()) {
+        return false;
+      }
 
       try {
         this.metaBuffers.delete(key);
@@ -313,7 +329,9 @@ class SharedKVStore {
       return false;
     }
 
-    if (!this.acquireStoreLock()) return false;
+    if (!this.acquireStoreLock()) {
+      return false;
+    }
 
     try {
       let deleted = false;
@@ -345,7 +363,9 @@ class SharedKVStore {
   }
 
   listKeys(pattern = null) {
-    if (!pattern) return Array.from(this.metaBuffers.keys());
+    if (!pattern) {
+      return Array.from(this.metaBuffers.keys());
+    }
 
     let regex;
     try {
@@ -364,7 +384,9 @@ class SharedKVStore {
 }
 
 function createStore(storeName = 'default', msgpack = true) {
-  if (stores.has(storeName)) return stores.get(storeName);
+  if (stores.has(storeName)) {
+    return stores.get(storeName);
+  }
   const store = new SharedKVStore(storeName, msgpack);
   const wrapper = {
     set: store.set.bind(store),
