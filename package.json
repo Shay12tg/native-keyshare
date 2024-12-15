@@ -1,6 +1,6 @@
 {
   "name": "native-keyshare",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "main": "index.js",
   "keywords": [
     "native",
@@ -21,7 +21,6 @@
     "type": "git",
     "url": "git+https://github.com/Shay12tg/native-keyshare.git"
   },
-  "dependencies": {},
   "optionalDependencies": {
     "msgpackr": "^1.11.2",
     "msgpackr-extract": "^3.0.3"

@@ -4,108 +4,143 @@ A high-performance shared key-value store implementation designed for multi-thre
 
 ## Features
 
-- **Shared Data Access**: Allows multiple worker threads to share and manipulate a single key-value store.
-- **High Performance**: Optimized for fast reads and writes using binary data formats.
-- **Simplified Communication**: Uses BroadcastChannel for seamless thread communication.
-- **TypeScript Support**: Includes type definitions for a great developer experience.
+- **Shared Data Access**: Allows multiple worker threads to share and manipulate data using named stores
+- **High Performance**: Optimized for fast reads and writes using TypedArrays and efficient buffer handling
+- **Pattern Operations**: Built-in support for wildcards and regex patterns
+- **Simplified Communication**: Uses BroadcastChannel for seamless thread communication
+- **No Dependencies**: Core functionality works without external dependencies
+- **Optional msgpackr**: 2-4x performance boost when using msgpackr
 
 ## Prerequisites
 
 - **Node.js** >= 16.0.0
-- **msgpackr** (optional): Improves serialization/deserialization performance by 2x.
-- **msgpackr-extract** (optional): Additional 10-20% performance gain.
+- **msgpackr** (optional): Improves serialization/deserialization performance by 2-4x
 
 ## Installation
 
 Install the library using npm:
 
-    npm install shared-kv-store
+```bash
+npm install native-keyshare
+```
 
-If you want to enable optional performance improvements, also install `msgpackr`:
+If you want to enable performance improvements, also install `msgpackr`:
 
-    npm install msgpackr
+```bash
+npm install msgpackr
+```
 
 ## Usage
 
-### Using a Shared Key-Value store
+### Basic Operations
 
-#### Main Thread Example (`index.js`)
+```javascript
+const { createStore } = require('native-keyshare');
 
-    const { createManager } = require('shared-kv-store');
-    const { Worker } = require('worker_threads');
+// Create a named store
+const store = createStore('mystore');
 
-    const store = createStore();
+// Basic operations
+store.set('user:1', { name: 'John' });
+console.log(store.get('user:1'));  // { name: 'John' }
+store.delete('user:1');
 
-    const worker1 = new Worker('./worker.js');
-    const worker2 = new Worker('./worker.js');
+// Named stores are isolated
+const cacheStore = createStore('cache');
+const userStore = createStore('users');
 
-    store.set('exampleKey', { value: 'Hello from Main!' });
-    console.log(store.get('exampleKey')); // Outputs: { value: 'Hello from Main!' }
+// Get same store instance
+const sameStore = createStore('mystore');
+```
 
-#### Worker Thread Example (`worker.js`)
+### Worker Thread Example
 
-    const { createStore } = require('shared-kv-store');
+#### Main Thread (`index.js`)
+```javascript
+const { Worker } = require('worker_threads');
+const { createStore } = require('native-keyshare');
 
-    const store = createStore();
+const store = createStore('shared');
+store.set('sharedKey', { value: 'Hello from main!' });
 
-    setTimeout(() => {
-      console.log(store.get('exampleKey')); // Outputs: { value: 'Hello from Main!' }
-      store.set('workerKey', { data: 'Hello from Worker!' });
-    }, 1000);
+const worker1 = new Worker('./worker.js');
+const worker2 = new Worker('./worker.js');
+```
+
+#### Worker Thread (`worker.js`)
+```javascript
+const { createStore } = require('native-keyshare');
+
+const store = createStore('shared');
+console.log(store.get('sharedKey'));  // { value: 'Hello from main!' }
+store.set('workerKey', { data: 'Hello from worker!' });
+```
 
 ## API
 
-### Store API
+### Store Creation
 
-#### `createStore(parentPort: MessagePort)`
-Creates a new shared key-value store for a worker thread.
+#### `createStore(storeName?: string)`
+Creates or retrieves a named key-value store instance.
 
-**Returns**: `ISharedKVStore`
+```javascript
+const store = createStore('mystore');    // Named store
+const defaultStore = createStore();      // Default store
+```
 
-- **`set(key: string, value: any, options = {}): boolean`**  
-  Sets a key-value pair in the store.
+### Store Methods
 
-- **`get(key: string): any`**  
-  Retrieves the value associated with a key.
+#### `set(key: string, value: any, options?: Options): boolean`
+Sets a key-value pair in the store.
+- **options.minBufferSize**: Initial buffer size in bytes if you expect value to grow
+- **options.maxBufferSize**: Buffer size limit. if object exceeds this, key will be removed.
 
-- **`delete(key: string): boolean`**  
-  Deletes a key-value pair from the store.
+#### `get(key: string): any`
+Retrieves a value from the store.
 
-## Example
+#### `delete(key: string): boolean`
+Deletes a value. Supports patterns.
 
-### Full Example
+#### `listKeys(pattern?: string): string[]`
+Lists all keys, optionally filtered by pattern.
 
-#### Main Thread
+### Pattern Operations
 
-    const { createStore } = require('shared-kv-store');
-    const { Worker } = require('worker_threads');
+The store supports two pattern matching styles for delete() and listKeys():
 
-    const store = createStore();
-    const worker = new Worker('./worker.js');
+```javascript
+// Glob-style wildcards
+store.delete('users:*');     // Matches: users:123, users:abc, etc
+store.delete('session:?');   // Matches: session:1, session:a
+store.delete('cache:??');    // Matches: cache:12, cache:ab
 
-    store.set('exampleKey', { value: 'Hello from Main!' });
-    console.log(store.get('exampleKey')); // { value: 'Hello from Main!' }
+// Regular expressions (enclosed in forward slashes)
+store.delete('/^user_\d+$/');   // Matches: user_1, user_123
+store.delete('/test_.+/');      // Matches: test_abc, test_123
 
-#### Worker (`worker.js`)
+// List keys matching patterns
+const userKeys = store.listKeys('user:*');
+const logKeys = store.listKeys('/log_\d+/');
+```
 
-    const { createStore } = require('shared-kv-store');
+## Performance Tips
 
-    const store = createStore();
-
-    setTimeout(() => {
-      console.log(store.get('exampleKey')); // { value: 'Hello from Main!' }
-      store.set('workerKey', { data: 'Hello from Worker!' });
-    }, 1000);
+1. Use msgpackr for better serialization (2-4x faster)
+2. Set appropriate minBufferSize when you know data will grow
+3. Batch operations when possible instead of individual calls
+4. Use pattern operations sparingly on large stores
 
 ## Benchmarks
 
 Performance test for `get`:
 
-    const store = createStore();
-    store.set('test', { value: 'Benchmark' });
+```javascript
+const store = createStore();
+store.set('test', { value: 'Benchmark' });
 
-    console.time('Benchmark');
-    for (let i = 0; i < 10000000; i++) {
-      store.get('test');
-    }
-    console.timeEnd('Benchmark');
+console.time('Benchmark');
+for (let i = 0; i < 10000000; i++) {
+  store.get('test');
+}
+console.timeEnd('Benchmark');
+```

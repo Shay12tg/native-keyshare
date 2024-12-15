@@ -1,22 +1,35 @@
-const { Worker, isMainThread, parentPort } = require('worker_threads');
-const { createManager, createStore } = require('./index');
+const { Worker, isMainThread } = require('worker_threads');
+const { createStore } = require('./index');
 
-const store = createStore();
+const store = createStore('');
 
 if (isMainThread) {
   console.log('Primary process started');
 
-  // Create two worker threads instead of forks
+
+  store.set('test', { hello: 1 }, {minBufferSize: 10000});
+  store.set('test', { hello: '133' });
+  store.set('test', { hello: '12333' });
+  store.set('test', { hello: 1, kk:'1111111111111111111111111111111111111111111111111' });
+  
+  let m = process.hrtime();
+  let x = 1;
+  for (let i = 0; i < 10000; i++) {
+    const y = store.get('test');
+    if (y.hello++ !== x++) {
+      console.error('a', y.hello, x);
+      process.exit(0)
+    }
+    y.kk += '1';
+    store.set('test', y);
+    
+  }
+  // console.log(store.get('test'))
+  console.log(getDurationInMilliseconds(m));
+  // process.exit();
+
   const worker1 = new Worker(__filename);
   const worker2 = new Worker(__filename);
-
-  store.set('someval', { hello: '1' });
-
-  let m = process.hrtime();
-  for (let i = 0; i < 10000; i++) {
-    store.get('someval');
-  }
-  console.log(getDurationInMilliseconds(m));
 
   setTimeout(() => {
     const worker3 = new Worker(__filename);
