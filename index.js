@@ -59,8 +59,6 @@ class SharedKVStore {
       action: 'initialize_request',
       timestamp: this.initTimestamp,
     });
-
-    setTimeout(() => console.log(this.initTimestamp), 5000);
   }
 
   handleMessage(message) {
@@ -174,7 +172,7 @@ class SharedKVStore {
   }
 
   set(key, value, options = {}) {
-    if (!this.validateKey(key) || value === undefined)throw new Error('wtf111');
+    if (!this.validateKey(key) || value === undefined) return false;
 
     let metaBuffer = this.metaBuffers.get(key);
     let dataBuffer = this.dataBuffers.get(key);
@@ -224,7 +222,7 @@ class SharedKVStore {
       return true;
     } catch (err) {
       console.error('Set error:', err);
-       throw err;
+      return false;
     } finally {
       if (acquired && metaBuffer) {
         this.releaseLock(metaBuffer);
