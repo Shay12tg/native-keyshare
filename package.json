@@ -21,10 +21,6 @@
     "type": "git",
     "url": "git+https://github.com/Shay12tg/native-keyshare.git"
   },
-  "optionalDependencies": {
-    "msgpackr": "^1.11.2",
-    "msgpackr-extract": "^3.0.3"
-  },
   "files": [
     "index.js",
     "index.d.ts",
