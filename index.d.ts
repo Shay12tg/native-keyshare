@@ -31,6 +31,11 @@ declare module 'native-keyshare' {
         delete(key: string): boolean;
 
         /**
+         * Clear the store.
+         */
+        clear(): void
+
+        /**
          * Close the store. cleanup local maps and buffer references.
          */
         close(): void

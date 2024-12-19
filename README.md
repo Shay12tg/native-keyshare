@@ -105,6 +105,9 @@ Deletes a value. Supports patterns.
 #### `listKeys(pattern?: string): string[]`
 Lists all keys, optionally filtered by pattern.
 
+#### `clear(): void`
+Clear the store.
+
 #### `close(): void`
 Close the store. cleanup local maps and buffer references.
 

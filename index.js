@@ -78,9 +78,7 @@ class SharedKVStore {
       }
 
       if (now >= ttl) {
-        this.metaBuffers.delete(key);
-        this.dataBuffers.delete(key);
-        this.ttlMap.delete(key);
+        this._delete(key);
       }
 
       if (i === limit) {
@@ -135,9 +133,13 @@ class SharedKVStore {
         if (message.pattern) {
           this.deletePattern(message.pattern);
         } else if (message.key) {
-          this.metaBuffers.delete(message.key);
-          this.dataBuffers.delete(message.key);
+          this._delete(message.key);
         }
+        return;
+      }
+
+      if (message.action === 'clear') {
+        this._clear();
         return;
       }
 
@@ -153,7 +155,8 @@ class SharedKVStore {
             keys: Array.from(this.metaBuffers.entries()).map(([key, metaBuffer]) => ({
               key,
               metaBuffer,
-              dataBuffer: this.dataBuffers.get(key)
+              dataBuffer: this.dataBuffers.get(key),
+              ttl: this.ttlMap.get(key)
             }))
           });
         }
@@ -169,10 +172,13 @@ class SharedKVStore {
 
           // Initialize with existing keys
           if (Array.isArray(message.keys)) {
-            for (const { key, metaBuffer, dataBuffer } of message.keys) {
+            for (const { key, metaBuffer, dataBuffer, ttl } of message.keys) {
               if (metaBuffer instanceof SharedArrayBuffer && dataBuffer instanceof SharedArrayBuffer) {
                 this.metaBuffers.set(key, metaBuffer);
                 this.dataBuffers.set(key, dataBuffer);
+                if (ttl) {
+                  this.ttlMap.set(key, ttl);
+                }
               }
             }
           }
@@ -360,6 +366,30 @@ class SharedKVStore {
     }
   }
 
+  clear() {
+    let locked = this.acquireStoreLock();
+    if (!locked) {
+      console.warn('Failed to acquire store lock for broadcast');
+      // return;
+    }
+    try {
+      this._clear();
+      this.channel.postMessage({
+        action: 'clear'
+      });
+    } finally {
+      if (locked) {
+        this.releaseStoreLock();
+      }
+    }
+  }
+
+  _clear() {
+    this.metaBuffers.clear();
+    this.dataBuffers.clear();
+    this.ttlMap.clear();
+  }
+
   delete(key) {
     if (!this.validateKey(key)) {
       return false;
@@ -384,9 +414,7 @@ class SharedKVStore {
       }
 
       try {
-        this.metaBuffers.delete(key);
-        this.dataBuffers.delete(key);
-        this.ttlMap.delete(key);
+        this._delete(key);
         this.channel.postMessage({
           action: 'delete',
           key
@@ -398,6 +426,12 @@ class SharedKVStore {
     } finally {
       this.releaseLock(metaBuffer);
     }
+  }
+
+  _delete(key) {
+    this.metaBuffers.delete(key);
+    this.dataBuffers.delete(key);
+    this.ttlMap.delete(key);
   }
 
   deletePattern(pattern) {
@@ -424,8 +458,7 @@ class SharedKVStore {
         if (regex.test(key)) {
           if (this.acquireLock(metaBuffer)) {
             try {
-              this.metaBuffers.delete(key);
-              this.dataBuffers.delete(key);
+              this._delete(key);
               deleted = true;
             } finally {
               this.releaseLock(metaBuffer);
@@ -477,6 +510,7 @@ function createStore(storeName = 'default', msgpack = true) {
     set: store.set.bind(store),
     get: store.get.bind(store),
     delete: store.delete.bind(store),
+    clear: store.clear.bind(store),
     listKeys: store.listKeys.bind(store),
     close: () => {
       store.close();

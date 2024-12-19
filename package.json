@@ -1,6 +1,6 @@
 {
   "name": "native-keyshare",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "main": "index.js",
   "keywords": [
     "native",
