@@ -76,6 +76,21 @@ console.log(store.get('sharedKey'));  // { value: 'Hello from main!' }
 store.set('workerKey', { data: 'Hello from worker!' });
 ```
 
+#### Locks
+```javascript
+// Initialize counter - minBufferSize to reuse the same buffer even when increasing length
+store.set('counter', 0, { minBufferSize: 20 });
+// the following code could be executed from every thread
+if (store.lock('counter')) {
+  try {
+    const x = store.get('counter', true);
+    store.set('counter', x + 1, { skipLock: true });
+  } finally {
+    store.release('counter');
+  }
+}
+```
+
 ## API
 
 ### Store Creation
@@ -96,7 +111,7 @@ Sets a key-value pair in the store.
 - **options.immutable**: Dont allow rewriting the buffer. create a new one on update.
 - **options.ttl**: TTL in seconds.
 
-#### `get(key: string): any`
+#### `get(key: string, skipLock: boolean = false): any`
 Retrieves a value from the store.
 
 #### `delete(key: string): boolean`
@@ -104,6 +119,12 @@ Deletes a value. Supports patterns.
 
 #### `listKeys(pattern?: string): string[]`
 Lists all keys, optionally filtered by pattern.
+
+#### `lock(key: string, timeout = 1000): boolean`
+Locks a key.
+
+#### `release(key: string): boolean`
+Releases a locked key.
 
 #### `clear(): void`
 Clear the store.

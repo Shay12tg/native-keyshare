@@ -3,6 +3,7 @@ declare module 'native-keyshare' {
         immutable?: boolean;
         minBufferSize?: number;
         ttl?: number | undefined;
+        skipLock?: boolean;
     }
 
     // Shared key-value store interface
@@ -19,9 +20,10 @@ declare module 'native-keyshare' {
         /**
          * Gets the value associated with a key.
          * @param key - The key to retrieve.
+         * @param skipLock - Optional boolean if skip the lock.
          * @returns The associated value, or `undefined` if the key does not exist.
          */
-        get<T = any>(key: string): T | undefined;
+        get<T = any>(key: string, skipLock = false): T | undefined;
 
         /**
          * Deletes a key-value pair from the store.
@@ -31,14 +33,36 @@ declare module 'native-keyshare' {
         delete(key: string): boolean;
 
         /**
+         * List all keys in store.
+         * @param pattern - Optional pattern.
+         * @returns array of keys.
+         */
+        listKeys(pattern?: string): string[];
+
+        /**
+         * Lock a key in store.
+         * @param key - The key to lock.
+         * @param timeout - Optional timeout (in ms. defualt 1000).
+         * @returns true if locked.
+         */
+        lock(key: string, timeout: number = 1000): boolean;
+
+        /**
+         * Release locked key in store.
+         * @param key - Release a lock.
+         * @returns true if released.
+         */
+        release(key: string): boolean;
+
+        /**
          * Clear the store.
          */
-        clear(): void
+        clear(): void;
 
         /**
          * Close the store. cleanup local maps and buffer references.
          */
-        close(): void
+        close(): void;
     }
 
     /**

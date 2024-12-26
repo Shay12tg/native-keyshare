@@ -1,9 +1,12 @@
 const { BroadcastChannel } = require('node:worker_threads');
 
-const stores = new Map();
-const LOCK_BYTES = 4;    // 32 bits for lock
-const SIZE_BYTES = 4;    // 32 bits for size
+const READERS_LOCK_BYTES = 4;
+const WRITER_LOCK_BYTES = 4;
+const LOCK_BYTES = READERS_LOCK_BYTES + WRITER_LOCK_BYTES;
+const SIZE_BYTES = 4;
 const META_SIZE = LOCK_BYTES + SIZE_BYTES;
+
+const stores = new Map();
 
 class SharedKVStore {
   constructor(storeName = 'default', msgpack = false) {
@@ -90,13 +93,13 @@ class SharedKVStore {
   }
 
   close() {
+    Object.keys(this).forEach(key => delete this[key]);
+    clearInterval(this.interval);
+    stores.delete(this.storeName);
+    this.channel.close();
     this.ttlMap.clear();
     this.dataBuffers.clear();
     this.metaBuffers.clear();
-    this.channel.close();
-    clearInterval(this.interval);
-    stores.delete(this.storeName);
-    Object.keys(this).forEach(key => delete this[key]);
   }
 
   handleMessage(message) {
@@ -206,32 +209,66 @@ class SharedKVStore {
     Atomics.notify(this.storeLock, 0);
   }
 
-  acquireLock(metaBuffer, isWrite = false) {
-    const lockView = new Int32Array(metaBuffer, 0, 1);
-
-    while (true) {
-      const current = Atomics.load(lockView, 0);
-      if (isWrite) {
-        if (current === 0 && Atomics.compareExchange(lockView, 0, 0, -1) === 0) {
-          return true;
-        }
-      } else {
-        if (current >= 0 && Atomics.compareExchange(lockView, 0, current, current + 1) === current) {
-          return true;
-        }
-      }
-      Atomics.wait(lockView, 0, current, 10);
-    }
+  lock(key, timeout = 1000) {
+    let meta = this.metaBuffers.get(key);
+    return meta && this._acquireLock(meta, true, timeout);
   }
 
-  releaseLock(metaBuffer, isWrite = false) {
-    const lockView = new Int32Array(metaBuffer, 0, 1);
-    if (isWrite) {
-      Atomics.store(lockView, 0, 0);
+  release(key) {
+    let meta = this.metaBuffers.get(key);
+    return meta && this._releaseLock(meta, 'rw');
+  }
+
+  _acquireLock(metaBuffer, exclusive = false, timeout = 1000) {
+    const view = new Int32Array(metaBuffer);
+    let i = timeout / 10;
+
+    if (exclusive) {
+      for (; i > 0; i--) {
+        if (Atomics.compareExchange(view, 1, 0, 1) === 0) {
+          break;
+        }
+        Atomics.wait(view, 1, 1, 10);
+      }
+
+      if (i > 0) {
+        for (; i > 0; i--) {
+          if (Atomics.load(view, 0) === 0) {
+            return true;
+          }
+          Atomics.wait(view, 0, Atomics.load(view, 0), 10);
+        }
+        Atomics.store(view, 1, 0);
+        Atomics.notify(view, 1);
+      }
     } else {
-      Atomics.sub(lockView, 0, 1);
+      for (; i > 0; i--) {
+        Atomics.add(view, 0, 1);
+        if (Atomics.load(view, 1) === 0) {
+          return true;
+        }
+        Atomics.sub(view, 0, 1);
+        Atomics.wait(view, 1, 1, 10);
+      }
     }
-    Atomics.notify(lockView, 0);
+    return false;
+  }
+
+  _releaseLock(metaBuffer, mode = 'r') {
+    const view = new Int32Array(metaBuffer);
+
+    if (mode === 'r') {
+      if (Atomics.sub(view, 0, 1) === 1) {
+        Atomics.notify(view, 0);
+      }
+    } else {
+      if (mode === 'rw') {
+        Atomics.store(view, 0, 0);
+        Atomics.notify(view, 0);
+      }
+      Atomics.store(view, 1, 0);
+      Atomics.notify(view, 1);
+    }
   }
 
   validateKey(key) {
@@ -246,16 +283,15 @@ class SharedKVStore {
     let metaBuffer = this.metaBuffers.get(key);
     let dataBuffer = this.dataBuffers.get(key);
     let acquired = false;
-    let acquiredStore = false;
 
     const data = this.packr.pack(value);
     const requiredSize = Math.max(options.minBufferSize ?? 0, data.length);
 
     try {
-      if (metaBuffer && !this.acquireLock(metaBuffer)) {
+      if (metaBuffer && !options.skipLock && !this._acquireLock(metaBuffer, true)) {
         return false;
       }
-      acquired = true;
+      acquired = !options.skipLock;
 
       const reuseBuffer = dataBuffer && !options.immutable && dataBuffer.byteLength >= requiredSize;
       const previousTTL = this.ttlMap.get(key);
@@ -296,7 +332,6 @@ class SharedKVStore {
           console.warn('Failed to acquire store lock for broadcast');
           return false;
         }
-        acquiredStore = true;
 
         try {
           this.metaBuffers.set(key, newMetaBuffer);
@@ -309,9 +344,7 @@ class SharedKVStore {
             ttl
           });
         } finally {
-          if (acquiredStore) {
-            this.releaseStoreLock();
-          }
+          this.releaseStoreLock();
         }
       }
 
@@ -321,19 +354,19 @@ class SharedKVStore {
       return false;
     } finally {
       if (acquired && metaBuffer) {
-        this.releaseLock(metaBuffer);
+        this._releaseLock(metaBuffer, 'w');
       }
     }
   }
 
-  get(key) {
+  get(key, skipLock = false) {
     const metaBuffer = this.metaBuffers.get(key);
     const dataBuffer = this.dataBuffers.get(key);
     if (!metaBuffer || !dataBuffer) {
       return undefined;
     }
 
-    if (!this.acquireLock(metaBuffer)) {
+    if (!skipLock && !this._acquireLock(metaBuffer, false)) {
       console.warn('failed to acquire');
       return undefined;
     }
@@ -362,7 +395,9 @@ class SharedKVStore {
       console.error('Get error:', err);
       return undefined;
     } finally {
-      this.releaseLock(metaBuffer);
+      if (!skipLock) {
+        this._releaseLock(metaBuffer, 'r');
+      }
     }
   }
 
@@ -390,13 +425,13 @@ class SharedKVStore {
     this.ttlMap.clear();
   }
 
-  delete(key) {
+  delete(key, skipLock = false) {
     if (!this.validateKey(key)) {
       return false;
     }
 
     if (key.includes('*') || key.includes('?') || (key.startsWith('/') && key.endsWith('/'))) {
-      return this.deletePattern(key);
+      return this.deletePattern(key, skipLock);
     }
 
     const metaBuffer = this.metaBuffers.get(key);
@@ -404,12 +439,12 @@ class SharedKVStore {
       return false;
     }
 
-    if (!this.acquireLock(metaBuffer)) {
+    if (!skipLock && !this._acquireLock(metaBuffer, true)) {
       return false;
     }
 
     try {
-      if (!this.acquireStoreLock()) {
+      if (!skipLock && !this.acquireStoreLock()) {
         return false;
       }
 
@@ -424,7 +459,7 @@ class SharedKVStore {
         this.releaseStoreLock();
       }
     } finally {
-      this.releaseLock(metaBuffer);
+      this._releaseLock(metaBuffer, 'w');
     }
   }
 
@@ -434,7 +469,7 @@ class SharedKVStore {
     this.ttlMap.delete(key);
   }
 
-  deletePattern(pattern) {
+  deletePattern(pattern, skipLock = false) {
     let regex;
     try {
       if (pattern.startsWith('/') && pattern.endsWith('/')) {
@@ -448,7 +483,7 @@ class SharedKVStore {
       return false;
     }
 
-    if (!this.acquireStoreLock()) {
+    if (!skipLock && !this.acquireStoreLock()) {
       return false;
     }
 
@@ -456,12 +491,14 @@ class SharedKVStore {
       let deleted = false;
       for (const [key, metaBuffer] of this.metaBuffers.entries()) {
         if (regex.test(key)) {
-          if (this.acquireLock(metaBuffer)) {
+          if (skipLock || this._acquireLock(metaBuffer, true)) {
             try {
               this._delete(key);
               deleted = true;
             } finally {
-              this.releaseLock(metaBuffer);
+              if (!skipLock) {
+                this._releaseLock(metaBuffer, 'w');
+              }
             }
           }
         }
@@ -510,11 +547,21 @@ function createStore(storeName = 'default', msgpack = true) {
     set: store.set.bind(store),
     get: store.get.bind(store),
     delete: store.delete.bind(store),
+    release: store.release.bind(store),
+    lock: store.lock.bind(store),
     clear: store.clear.bind(store),
     listKeys: store.listKeys.bind(store),
     close: () => {
       store.close();
-      Object.keys(wrapper).forEach(key => delete wrapper[key]);
+
+      wrapper.get = () => undefined;
+      wrapper.set = () => undefined;
+      wrapper.delete = () => true;
+      wrapper.lock = () => true;
+      wrapper.release = () => true;
+      wrapper.listKeys = () => [];
+      wrapper.clear = () => { };
+      wrapper.close = () => { };
     }
   };
   stores.set(storeName, wrapper);
