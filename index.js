@@ -1,4 +1,5 @@
 const { BroadcastChannel } = require('node:worker_threads');
+const { serialize, deserialize } = require('node:v8');
 
 const READERS_LOCK_BYTES = 4;
 const WRITER_LOCK_BYTES = 4;
@@ -30,17 +31,21 @@ class SharedKVStore {
         }
       }
     } catch (E) { }
+    // this.packr ||= {
+    //   pack: (value) => {
+    //     const jsonStr = JSON.stringify(value);
+    //     const encoder = new TextEncoder();
+    //     return encoder.encode(jsonStr);
+    //   },
+    //   unpack: (buffer) => {
+    //     const decoder = new TextDecoder();
+    //     const jsonStr = decoder.decode(buffer);
+    //     return JSON.parse(jsonStr);
+    //   },
+    // };
     this.packr ||= {
-      pack: (value) => {
-        const jsonStr = JSON.stringify(value);
-        const encoder = new TextEncoder();
-        return encoder.encode(jsonStr);
-      },
-      unpack: (buffer) => {
-        const decoder = new TextDecoder();
-        const jsonStr = decoder.decode(buffer);
-        return JSON.parse(jsonStr);
-      },
+      pack: serialize,
+      unpack: deserialize,
     };
 
     this.storeLockBuffer = new SharedArrayBuffer(LOCK_BYTES);
