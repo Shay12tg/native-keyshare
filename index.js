@@ -10,9 +10,9 @@ const META_SIZE = LOCK_BYTES + SIZE_BYTES;
 const stores = new Map();
 
 class SharedKVStore {
-  constructor(storeName = 'default', msgpack = false) {
+  constructor(storeName = 'default', msgpack = true) {
     this.storeName = storeName;
-    this.msgpack = msgpack;
+    this.msgpack = false;
 
     try {
       if (msgpack) {
@@ -25,9 +25,10 @@ class SharedKVStore {
           maxSharedStructures: 4096,
           shouldShareStructure: struct => struct.length < 64
         });
+        this.msgpack = true;
         if (!isNativeAccelerationEnabled) {
-          console.error('Native acceleration not enabled - fallback to json');
-          this.packr = null;
+          console.error('Native acceleration not enabled');
+          // this.packr = null;
         }
       }
     } catch (E) { }
@@ -45,7 +46,7 @@ class SharedKVStore {
     // };
     this.packr ||= {
       pack: serialize,
-      unpack: deserialize,
+      unpack: deserialize
     };
 
     this.storeLockBuffer = new SharedArrayBuffer(LOCK_BYTES);
